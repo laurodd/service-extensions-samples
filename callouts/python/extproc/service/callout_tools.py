@@ -207,6 +207,29 @@ def deny_callout(context, msg: str | None = None) -> None:
   logging.warning(msg)
   context.abort(grpc.StatusCode.PERMISSION_DENIED, msg)
 
+# I created this function because the default one does not handle the body content needed by the DataDome captcha
+def datadome_immediate_response(
+    code: StatusCode,
+    body: str,
+    headers: list[tuple[str, str]] | None = None,
+    append_action: Union[HeaderValueOption.HeaderAppendAction, None] = None,
+) -> ImmediateResponse:
+  immediate_response = ImmediateResponse()
+  immediate_response.status.code = code
+
+  if headers:
+    header_mutation = HeaderMutation()
+    for k, v in headers:
+      header_value_option = HeaderValueOption(
+          header=HeaderValue(key=k, raw_value=bytes(v, 'utf-8')))
+      if append_action:
+        header_value_option.append_action = append_action
+      header_mutation.set_headers.append(header_value_option)
+
+    immediate_response.headers.CopyFrom(header_mutation)
+    immediate_response.body = str.encode(body)
+    logging.debug("DataDome immediate_response")
+  return immediate_response
 
 def header_immediate_response(
     code: StatusCode,
