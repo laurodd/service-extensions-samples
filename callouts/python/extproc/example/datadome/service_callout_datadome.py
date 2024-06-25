@@ -49,14 +49,10 @@ class CalloutServerExample(callout_server.CalloutServer):
 
     logging.debug("DataDome : clientID logging %s", clientId)
 
-    for value in context.__dict__:
-      logging.debug("DataDome Value: %s %s",value,context.__dict__[value])
-    logging.debug(context.details)
-    logging.debug(context.peer)
+    # Context infomation being used : is this the good key?
     logging.debug(context.__str__)
-    logging.debug(context.auth_context)
 
-
+    # Test values
     datadome_payload = {
         "Key": datadome_server_side_key,
         "Accept": http_headers_dic.get('accept'),
@@ -66,7 +62,7 @@ class CalloutServerExample(callout_server.CalloutServer):
         "Connection": "keep-alive",
         "ClientID": clientId,
         "HeadersList": "Host,Connection,Pragma,Cookie,Cache-Control,User-Agent",
-        "Host": "localhost",
+        "Host": "localhost", # importart for the local tests: used to set the cookie domain, so seeting to localhost
         "IP": "62.35.12.13",
         "Method": "GET",
         "ModuleVersion": "1.0",
@@ -79,7 +75,6 @@ class CalloutServerExample(callout_server.CalloutServer):
         "ServerHostname": "localhost",
         "ServerName": "Lauro",
         "TimeRequest": 1494584456492817,
-        "TlsProtocol": http_headers_dic.get('TLS'),
         "UserAgent": http_headers_dic.get('user-agent'),
         "XForwardedForIP": http_headers_dic.get('X-Forwarded-For') 
     }
@@ -145,10 +140,7 @@ class CalloutServerExample(callout_server.CalloutServer):
       http_headers_dic[header.key] = header.raw_value.decode()
 
     logging.debug("DataDome : headers on_response_headers %s", http_headers_dic)
-    logging.debug(context.details)
-    logging.debug(context.peer)
     logging.debug(context.__str__)
-    logging.debug(context.auth_context)
 
     return callout_tools.add_header_mutation(
         add=[('Set-Cookie', datadome_cookie)],
