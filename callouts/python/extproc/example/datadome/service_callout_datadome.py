@@ -19,8 +19,9 @@ datadome_request_headers = {
 "Content-Type": "application/x-www-form-urlencoded",
 "User-Agent": "DataDome"
 }
+default_value = None
 
-class CalloutServerExample(callout_server.CalloutServer):
+class DataDomeCalloutServerExample(callout_server.CalloutServer):
 
 #######################################################################################
 # on_request_headers : before origin, we are able to mutate (only) the request headers
@@ -29,28 +30,21 @@ class CalloutServerExample(callout_server.CalloutServer):
       self, headers: service_pb2.HttpHeaders,
       context: ServicerContext) -> service_pb2.ImmediateResponse | service_pb2.HeadersResponse:
 
-    logging.debug("DataDome : on_request_headers")
     #######################
     # DataDome code example
     #######################
+
+    logging.debug("DataDome : on_request_headers")
 
     http_headers = headers.headers.headers 
     http_headers_dic={}
     for header in http_headers:
       http_headers_dic[header.key] = header.raw_value.decode()
 
-    logging.debug("DataDome : headers receives from LB %s", http_headers_dic)
-    logging.debug("DataDome : cookie logging %s", http_headers_dic.get('cookie'))
-
     # DataDome clientID simple test: this is only to make sure this is working properly and we are only considering our cookie
     clientId = http_headers_dic.get('cookie')
     if clientId != None:
       clientId = clientId.replace('datadome=','')
-
-    logging.debug("DataDome : clientID logging %s", clientId)
-
-    # Context infomation being used : is this the good key?
-    logging.debug(context.__str__)
 
     # Test values
     datadome_payload = {
@@ -79,9 +73,13 @@ class CalloutServerExample(callout_server.CalloutServer):
         "XForwardedForIP": http_headers_dic.get('X-Forwarded-For') 
     }
 
-    response = requests.post(datadome_endpoint, data=datadome_payload, headers=datadome_request_headers)
-    logging.debug("Called DataDome: %s response", response.status_code)
-    logging.debug("Response body: %s", response.text) 
+    try:
+      response = requests.post(datadome_endpoint, data=datadome_payload, headers=datadome_request_headers)
+    except requests.RequestException as err:
+      logging.debug(f"DataDome: an error occurred calling the API server: {err}")
+      return service_pb2.HeadersResponse()
+    logging.debug("DataDome: API Server response %s", response.status_code)
+    logging.debug("DataDome: API Server response body: %s", response.text)
 
     header_pairs_dic = {} 
     header_pairs_list = [] 
@@ -101,18 +99,15 @@ class CalloutServerExample(callout_server.CalloutServer):
             body=response.text,
             headers=header_pairs_list)
 
-      # TODO: 400 code with immediate_response
-
       if datadome_response_code == 200 :
         # add DataDome cookie to the dictionnary to be reused inside on_response_headers
         with lock:
-          datadome_cookie_dict[context.__str__] = header_pairs_dic['Set-Cookie']
+          datadome_cookie_dict[id(context)] = header_pairs_dic['Set-Cookie']
 
         return callout_tools.add_header_mutation(
         add=header_pairs_list,
         append_action=actions.OVERWRITE_IF_EXISTS_OR_ADD)
-      
-      logging.debug(response.text)
+
     else :
      logging.debug("DataDome: Unexpected return code")
     
@@ -129,25 +124,24 @@ class CalloutServerExample(callout_server.CalloutServer):
     logging.debug("DataDome : on_response_headers")
 
     with lock:
-      # TODO: use get to avoid exception when cookie not present
-      datadome_cookie = datadome_cookie_dict[context.__str__]
-    logging.debug("DataDome cookie %s",datadome_cookie)
+      datadome_cookie = datadome_cookie_dict.pop(id(context), default_value)
 
-    http_headers = headers.headers.headers 
-    http_headers_dic={}
-    for header in http_headers:
-      http_headers_dic[header.key + '_raw'] = header.raw_value
-      http_headers_dic[header.key] = header.raw_value.decode()
+    if datadome_cookie is not None:
+      logging.debug("DataDome : cookie %s", datadome_cookie)
+      http_headers = headers.headers.headers
+      http_headers_dic={}
+      for header in http_headers:
+        http_headers_dic[header.key] = header.raw_value.decode()
 
-    logging.debug("DataDome : headers on_response_headers %s", http_headers_dic)
-    logging.debug(context.__str__)
-
-    return callout_tools.add_header_mutation(
-        add=[('Set-Cookie', datadome_cookie)],
-        append_action=actions.OVERWRITE_IF_EXISTS_OR_ADD)
+      return callout_tools.add_header_mutation(
+          add=[('Set-Cookie', datadome_cookie)],
+          append_action=actions.OVERWRITE_IF_EXISTS_OR_ADD)
+    else:
+      logging.debug("DataDome: no cookie detected")
+      return service_pb2.HeadersResponse()
 
 
 if __name__ == '__main__':
   logging.basicConfig(level=logging.DEBUG)
   # Run the gRPC service
-  CalloutServerExample().run()
+  DataDomeCalloutServerExample().run()
