@@ -42,8 +42,8 @@ class DataDomeCalloutServerExample(callout_server.CalloutServer):
       http_headers_dic[header.key] = header.raw_value.decode()
 
     # DataDome clientID simple test: this is only to make sure this is working properly and we are only considering our cookie
-    clientId = http_headers_dic.get('cookie')
-    if clientId != None:
+    clientId = http_headers_dic.get('cookie', default_value)
+    if clientId is not None:
       clientId = clientId.replace('datadome=','')
 
     # Test values
@@ -89,7 +89,6 @@ class DataDomeCalloutServerExample(callout_server.CalloutServer):
     
     logging.debug(header_pairs_dic)
 
-    # Check DataDome response
     datadome_response_code = response.status_code
 
     if datadome_response_code in [200, 403, 401, 400]:
