@@ -20,6 +20,8 @@ import (
 	"net"
 	"net/http"
 
+	//"fmt"
+
 	extproc "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -120,10 +122,10 @@ func (s *CalloutServer) StartInsecureGRPC(service extproc.ExternalProcessorServe
 }
 
 // RequestHeadersHandler handles request headers.
-type RequestHeadersHandler func(*extproc.HttpHeaders) (*extproc.ProcessingResponse, error)
+type RequestHeadersHandler func(*extproc.HttpHeaders, *[]struct{ Key, Value string }) (*extproc.ProcessingResponse, error)
 
 // ResponseHeadersHandler handles response headers.
-type ResponseHeadersHandler func(*extproc.HttpHeaders) (*extproc.ProcessingResponse, error)
+type ResponseHeadersHandler func(*extproc.HttpHeaders, *[]struct{ Key, Value string }) (*extproc.ProcessingResponse, error)
 
 // RequestBodyHandler handles request bodies.
 type RequestBodyHandler func(*extproc.HttpBody) (*extproc.ProcessingResponse, error)
@@ -154,7 +156,11 @@ type GRPCCalloutService struct {
 }
 
 // Process processes incoming gRPC streams.
+// reference: https://github.com/envoyproxy/go-control-plane/blob/main/envoy/service/ext_proc/v3/external_processor_grpc.pb.go#L75
+// reference: https://pkg.go.dev/google.golang.org/grpc#ClientConn.NewStream
 func (s *GRPCCalloutService) Process(stream extproc.ExternalProcessor_ProcessServer) error {
+	var dataDomeResponseHeaders []struct{ Key, Value string }
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -165,11 +171,11 @@ func (s *GRPCCalloutService) Process(stream extproc.ExternalProcessor_ProcessSer
 		switch {
 		case req.GetRequestHeaders() != nil:
 			if s.Handlers.RequestHeadersHandler != nil {
-				response, err = s.Handlers.RequestHeadersHandler(req.GetRequestHeaders())
+				response, err = s.Handlers.RequestHeadersHandler(req.GetRequestHeaders(), &dataDomeResponseHeaders)
 			}
 		case req.GetResponseHeaders() != nil:
 			if s.Handlers.ResponseHeadersHandler != nil {
-				response, err = s.Handlers.ResponseHeadersHandler(req.GetResponseHeaders())
+				response, err = s.Handlers.ResponseHeadersHandler(req.GetResponseHeaders(), &dataDomeResponseHeaders)
 			}
 		case req.GetRequestBody() != nil:
 			if s.Handlers.RequestBodyHandler != nil {
@@ -202,7 +208,7 @@ func (s *GRPCCalloutService) Process(stream extproc.ExternalProcessor_ProcessSer
 }
 
 // HandleRequestHeaders handles request headers.
-func (s *GRPCCalloutService) HandleRequestHeaders(headers *extproc.HttpHeaders) (*extproc.ProcessingResponse, error) {
+func (s *GRPCCalloutService) HandleRequestHeaders(headers *extproc.HttpHeaders, dataDomeResponseHeaders *[]struct{ Key, Value string }) (*extproc.ProcessingResponse, error) {
 	return &extproc.ProcessingResponse{
 		Response: &extproc.ProcessingResponse_RequestHeaders{
 			RequestHeaders: &extproc.HeadersResponse{},
@@ -211,7 +217,7 @@ func (s *GRPCCalloutService) HandleRequestHeaders(headers *extproc.HttpHeaders) 
 }
 
 // HandleResponseHeaders handles response headers.
-func (s *GRPCCalloutService) HandleResponseHeaders(headers *extproc.HttpHeaders) (*extproc.ProcessingResponse, error) {
+func (s *GRPCCalloutService) HandleResponseHeaders(headers *extproc.HttpHeaders, dataDomeResponseHeaders *[]struct{ Key, Value string }) (*extproc.ProcessingResponse, error) {
 	return &extproc.ProcessingResponse{
 		Response: &extproc.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extproc.HeadersResponse{},
